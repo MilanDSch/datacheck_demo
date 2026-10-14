@@ -31,3 +31,20 @@ def test_uploads_show_up_in_the_list(client):
     upload(client, name="a.csv")
     upload(client, name="b.csv")
     assert [d["name"] for d in client.get("/api/v1/datasets").json()] == ["a.csv", "b.csv"]
+
+
+def test_job_with_a_bad_body_is_422(client):
+    response = client.post("/api/v1/jobs", json={"dataset_id": "abc"})
+    assert response.status_code == 422
+
+
+def test_job_for_a_missing_dataset_is_404(client):
+    assert client.post("/api/v1/jobs", json={"dataset_id": 999}).status_code == 404
+
+
+def test_job_starts_queued_and_the_report_is_not_ready(client):
+    dataset_id = upload(client).json()["id"]
+    job = client.post("/api/v1/jobs", json={"dataset_id": dataset_id})
+    assert job.status_code == 202
+    assert job.json()["status"] == "queued"
+    assert client.get(f"/api/v1/jobs/{job.json()['id']}/report").status_code == 409

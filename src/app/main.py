@@ -4,7 +4,7 @@ from .core.auth import TokenValidator, entra_validator
 from .core.settings import Settings, get_settings
 from .db.session import make_engine
 from .repositories.storage import LocalStorage, Storage
-from .routers import datasets, me
+from .routers import datasets, jobs, me
 
 
 def create_app(
@@ -23,6 +23,6 @@ def create_app(
     app.state.storage = storage or LocalStorage(settings.upload_dir)
     if settings.auth_mode == "entra":
         app.state.validator = validator or entra_validator(settings.tenant_id, settings.api_client_id)
-    for router in (me.router, datasets.router):
+    for router in (me.router, datasets.router, jobs.router):
         app.include_router(router, prefix="/api/v1")
     return app
