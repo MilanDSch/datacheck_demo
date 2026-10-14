@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from ..core.settings import SettingsDep
 from ..db.session import new_session
 from ..repositories.datasets import DatasetRepository
+from ..repositories.jobs import JobRepository
 from ..repositories.storage import Storage
 from ..services.datasets import DatasetService
 
@@ -37,6 +38,13 @@ def get_dataset_repo(session: SessionDep) -> DatasetRepository:
 
 
 DatasetRepoDep = Annotated[DatasetRepository, Depends(get_dataset_repo)]
+
+
+def get_job_repo(session: SessionDep) -> JobRepository:
+    return JobRepository(session)
+
+
+JobRepoDep = Annotated[JobRepository, Depends(get_job_repo)]
 
 
 def get_dataset_service(repo: DatasetRepoDep, storage: StorageDep, settings: SettingsDep) -> DatasetService:
