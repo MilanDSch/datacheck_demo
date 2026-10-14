@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from .core.settings import Settings, get_settings
 from .db.session import make_engine
 from .repositories.storage import LocalStorage, Storage
-from .routers import datasets
+from .routers import datasets, jobs
 
 
 def create_app(
@@ -19,6 +19,6 @@ def create_app(
     app.state.settings = settings
     app.state.engine = make_engine(settings.database_url)
     app.state.storage = storage or LocalStorage(settings.upload_dir)
-    for router in (datasets.router,):
+    for router in (datasets.router, jobs.router):
         app.include_router(router, prefix="/api/v1")
     return app
