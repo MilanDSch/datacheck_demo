@@ -12,6 +12,7 @@ from app.repositories.storage import FakeStorage
 ROOT = Path(__file__).resolve().parent.parent
 
 GOOD_CSV = b"time,temp\n0,20\n5,21\n8,22\n"
+CSV_WITH_GAP = b"time,temp\n0,20\n50,21\n100,\n"
 CSV_NO_TIME = b"when,temp\n0,20\n"
 
 
