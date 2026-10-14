@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 
+from ..core.auth import User, require_role
+from ..core.flags import require_flag
 from ..core.settings import SettingsDep
 from ..schemas.datasets import DatasetOut
 from ..services.datasets import InvalidUpload, TooLarge
-from .deps import DatasetServiceDep
+from .deps import DatasetRepoDep, DatasetServiceDep
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
@@ -13,11 +15,12 @@ def upload_dataset(
     file: UploadFile,
     settings: SettingsDep,
     service: DatasetServiceDep,
+    user: User = Depends(require_role("Researcher", "Admin")),
 ) -> DatasetOut:
     limit = settings.max_upload_mb * 1024 * 1024
     data = file.file.read(limit + 1)  # never read more than the limit plus one byte
     try:
-        dataset = service.upload(file.filename or "upload.csv", data, owner_oid="local")
+        dataset = service.upload(file.filename or "upload.csv", data, owner_oid=user.oid)
     except TooLarge:
         raise HTTPException(status_code=413, detail="file too large") from None
     except InvalidUpload as exc:
@@ -26,5 +29,31 @@ def upload_dataset(
 
 
 @router.get("", response_model=list[DatasetOut])
-def list_datasets(service: DatasetServiceDep) -> list[DatasetOut]:
+def list_datasets(
+    service: DatasetServiceDep,
+    _: User = Depends(require_role("Viewer", "Researcher", "Admin")),
+) -> list[DatasetOut]:
     return [DatasetOut.model_validate(d) for d in service.list_all()]
+
+
+@router.get("/export.csv", dependencies=[Depends(require_flag("csv_export"))])
+def export_datasets(
+    service: DatasetServiceDep,
+    _: User = Depends(require_role("Researcher", "Admin")),
+) -> Response:
+    lines = ["id,name,rows"] + [f"{d.id},{d.name},{d.rows}" for d in service.list_all()]
+    return Response(chr(10).join(lines) + chr(10), media_type="text/csv")
+
+
+@router.delete("/{dataset_id}", status_code=204)
+def delete_dataset(
+    dataset_id: int,
+    repo: DatasetRepoDep,
+    user: User = Depends(require_role("Researcher", "Admin")),
+) -> None:
+    dataset = repo.get(dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+    if "Admin" not in user.roles and dataset.owner_oid != user.oid:  # "own only"
+        raise HTTPException(status_code=403, detail="you may only delete your own datasets")
+    repo.delete(dataset)

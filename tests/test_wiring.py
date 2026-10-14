@@ -17,7 +17,7 @@ class FakeRepo:
 
 def test_list_datasets_with_a_fake_repository():
     # no migration was run and no table exists: the real repository is never built
-    app = create_app(Settings(database_url="sqlite://"))
+    app = create_app(Settings(database_url="sqlite://", auth_mode="off"))
     app.dependency_overrides[get_dataset_repo] = FakeRepo
     client = TestClient(app)
 
@@ -32,7 +32,7 @@ def test_the_session_is_closed_after_the_request(tmp_path):
 
     url = f"sqlite:///{tmp_path}/s.db"
     migrate(url)
-    app = create_app(Settings(database_url=url))
+    app = create_app(Settings(database_url=url, auth_mode="off"))
     pool = app.state.engine.pool
     with TestClient(app) as client:
         assert client.get("/api/v1/datasets").status_code == 200
