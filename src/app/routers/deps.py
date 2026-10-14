@@ -1,33 +1,34 @@
-"""The provider functions: the only code that knows how FastAPI builds each layer."""
+"""The provider functions: the only code that knows how FastAPI builds each layer.
+
+The classes they build (repositories, services) stay plain Python and never import FastAPI.
+"""
 
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 
+from ..core.settings import SettingsDep
 from ..repositories.datasets import DatasetRepository
-from ..repositories.storage import LocalStorage, Storage
+from ..repositories.storage import Storage
 from ..services.datasets import DatasetService
 
-_repo = DatasetRepository()  # one shared store for the whole process, for now
-_storage = LocalStorage("./uploads")
 
-
-def get_dataset_repo() -> DatasetRepository:
-    return _repo
-
-
-DatasetRepoDep = Annotated[DatasetRepository, Depends(get_dataset_repo)]
-
-
-def get_storage() -> Storage:
-    return _storage
+def get_storage(request: Request) -> Storage:
+    return request.app.state.storage
 
 
 StorageDep = Annotated[Storage, Depends(get_storage)]
 
 
-def get_dataset_service(repo: DatasetRepoDep, storage: StorageDep) -> DatasetService:
-    return DatasetService(repo, storage, max_upload_mb=100)
+def get_dataset_repo(request: Request) -> DatasetRepository:
+    return request.app.state.dataset_repo  # in memory until chapter 8
+
+
+DatasetRepoDep = Annotated[DatasetRepository, Depends(get_dataset_repo)]
+
+
+def get_dataset_service(repo: DatasetRepoDep, storage: StorageDep, settings: SettingsDep) -> DatasetService:
+    return DatasetService(repo, storage, settings.max_upload_mb)
 
 
 DatasetServiceDep = Annotated[DatasetService, Depends(get_dataset_service)]

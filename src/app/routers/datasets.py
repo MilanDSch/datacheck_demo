@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile
 
+from ..core.settings import SettingsDep
 from ..schemas.datasets import DatasetOut
 from ..services.datasets import InvalidUpload, TooLarge
 from .deps import DatasetServiceDep
@@ -8,8 +9,13 @@ router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 
 @router.post("", response_model=DatasetOut, status_code=201)
-def upload_dataset(file: UploadFile, service: DatasetServiceDep) -> DatasetOut:
-    data = file.file.read()
+def upload_dataset(
+    file: UploadFile,
+    settings: SettingsDep,
+    service: DatasetServiceDep,
+) -> DatasetOut:
+    limit = settings.max_upload_mb * 1024 * 1024
+    data = file.file.read(limit + 1)  # never read more than the limit plus one byte
     try:
         dataset = service.upload(file.filename or "upload.csv", data, owner_oid="local")
     except TooLarge:
