@@ -1,0 +1,63 @@
+# Local development stack: API, worker and a real Postgres. Start with: docker compose up --build
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: datacheck
+      POSTGRES_PASSWORD: datacheck # development only, it never leaves your laptop
+      POSTGRES_DB: datacheck
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U datacheck"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: .
+    ports:
+      - "${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads:/data/uploads
+      - ./src:/app/src # edit code on your laptop, the container sees it
+    environment:
+      DATABASE_URL: postgresql+psycopg://datacheck:datacheck@db:5432/datacheck
+      UPLOAD_DIR: /data/uploads
+      AUTH_MODE: "off"
+      FEATURE_CSV_EXPORT: "${FEATURE_CSV_EXPORT:-false}"
+      PYTHONPATH: /app/src
+    # migrate first, then start: if the migration fails the API does not start
+    command:
+      - sh
+      - -c
+      - >-
+        alembic upgrade head && uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000
+        --reload --reload-dir /app/src
+
+  worker:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://datacheck:datacheck@db:5432/datacheck
+      UPLOAD_DIR: /data/uploads
+      PYTHONPATH: /app/src
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy # the API has migrated by the time it is healthy
+    volumes:
+      - uploads:/data/uploads
+      - ./src:/app/src
+    command: ["python", "-m", "app.worker"]
+
+volumes:
+  pgdata:
+  uploads:
