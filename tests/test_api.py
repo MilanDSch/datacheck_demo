@@ -1,4 +1,9 @@
-from .conftest import CSV_NO_TIME, GOOD_CSV
+from app.db.session import new_session
+from app.repositories.datasets import DatasetRepository
+from app.repositories.jobs import JobRepository
+from app.services.jobs import JobService
+
+from .conftest import CSV_NO_TIME, CSV_WITH_GAP, GOOD_CSV
 
 
 def upload(client, content=GOOD_CSV, name="run.csv"):
@@ -42,9 +47,30 @@ def test_job_for_a_missing_dataset_is_404(client):
     assert client.post("/api/v1/jobs", json={"dataset_id": 999}).status_code == 404
 
 
-def test_job_starts_queued_and_the_report_is_not_ready(client):
-    dataset_id = upload(client).json()["id"]
+
+def test_job_flow_202_then_409_then_200(client, storage):
+    dataset_id = upload(client, CSV_WITH_GAP).json()["id"]
     job = client.post("/api/v1/jobs", json={"dataset_id": dataset_id})
     assert job.status_code == 202
-    assert job.json()["status"] == "queued"
-    assert client.get(f"/api/v1/jobs/{job.json()['id']}/report").status_code == 409
+    job_id = job.json()["id"]
+
+    assert client.get(f"/api/v1/jobs/{job_id}/report").status_code == 409  # the 409 trap
+
+    with new_session(client.app.state.engine) as session:  # play the worker once
+        service = JobService(JobRepository(session), DatasetRepository(session), storage)
+        assert service.run_next() is True
+        assert service.run_next() is False  # nothing left
+
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "done"
+    report = client.get(f"/api/v1/jobs/{job_id}/report")
+    assert report.status_code == 200
+    assert report.json()["quality_score"] == 100 - 1 - 5 * 2
+
+
+def test_worker_marks_a_broken_job_failed_and_survives(client, storage):
+    dataset_id = upload(client).json()["id"]
+    job_id = client.post("/api/v1/jobs", json={"dataset_id": dataset_id}).json()["id"]
+    storage.files.clear()  # the file vanished: the job must fail, not crash the worker
+    with new_session(client.app.state.engine) as session:
+        JobService(JobRepository(session), DatasetRepository(session), storage).run_next()
+    assert client.get(f"/api/v1/jobs/{job_id}").json()["status"] == "failed"
