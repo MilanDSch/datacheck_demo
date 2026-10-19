@@ -2,11 +2,11 @@ from typing import TYPE_CHECKING
 
 from quality import check_quality
 
-from ..db.models import Job, JobStatus
+from ..db.models import Job, JobStatus, Visibility
 from ..repositories.datasets import DatasetRepository
 from ..repositories.jobs import JobRepository
 from ..repositories.storage import Storage
-from .access import owns_or_admin
+from .access import can_read
 from .errors import DatasetNotFound, JobNotFound, ReportNotReady
 
 if TYPE_CHECKING:
@@ -20,14 +20,20 @@ class JobService:
         self.storage = storage
 
     def start(self, dataset_id: int, user: "User") -> Job:
-        if self.datasets.get(dataset_id) is None:
-            raise DatasetNotFound
+        dataset = self.datasets.get(dataset_id)
+        if dataset is None or not can_read(user, dataset.owner_oid, dataset.visibility):
+            raise DatasetNotFound  # a private dataset of someone else looks like a missing one
         return self.jobs.create(dataset_id, owner_oid=user.oid)
 
     def get(self, job_id: int, user: "User") -> Job:
-        """Owners and Admins only. Anyone else gets JobNotFound, so the API never says which ids exist."""
+        """The job's owner, Admins, and everyone when its dataset is public. Anyone else gets JobNotFound,
+        so the API never says which ids exist."""
         job = self.jobs.get(job_id)
-        if job is None or not owns_or_admin(user, job.owner_oid):
+        if job is None:
+            raise JobNotFound
+        dataset = self.datasets.get(job.dataset_id)
+        visibility = dataset.visibility if dataset is not None else Visibility.PRIVATE
+        if not can_read(user, job.owner_oid, visibility):
             raise JobNotFound
         return job
 
