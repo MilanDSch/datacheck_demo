@@ -109,7 +109,9 @@ def test_viewer_may_read_but_not_upload_403(client, lotte, pieter):
 def test_delete_own_only(client, private_key, lotte):
     dataset_id = upload(client, lotte).json()["id"]
     other = {"Authorization": f"Bearer {make_token(private_key, oid='oid-someone-else')}"}
-    assert client.delete(f"/api/v1/datasets/{dataset_id}", headers=other).status_code == 403
+    assert (
+        client.delete(f"/api/v1/datasets/{dataset_id}", headers=other).status_code == 404
+    )  # private: hidden
     admin = {"Authorization": f"Bearer {make_token(private_key, roles=('Admin',), oid='oid-admin')}"}
     assert client.delete(f"/api/v1/datasets/{dataset_id}", headers=admin).status_code == 204
 

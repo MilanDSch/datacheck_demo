@@ -29,6 +29,19 @@ class DatasetRepository:
     def list_all(self) -> list[Dataset]:
         return list(self.session.scalars(select(Dataset).order_by(Dataset.id)))
 
+    def list_readable_by(self, owner_oid: str) -> list[Dataset]:
+        """The datasets this owner may read: their own plus every public one."""
+        stmt = (
+            select(Dataset)
+            .where((Dataset.owner_oid == owner_oid) | (Dataset.visibility == Visibility.PUBLIC.value))
+            .order_by(Dataset.id)
+        )
+        return list(self.session.scalars(stmt))
+
+    def set_visibility(self, dataset: Dataset, visibility: Visibility) -> None:
+        dataset.visibility = visibility.value
+        self.session.commit()
+
     def delete(self, dataset: Dataset) -> None:
         self.session.delete(dataset)
         self.session.commit()
