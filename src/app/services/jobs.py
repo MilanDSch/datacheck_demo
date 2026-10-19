@@ -24,12 +24,12 @@ class JobService:
             raise JobNotFound
         return job
 
-    def get_report(self, job_id: int) -> Job:
-        """The finished job, whose quality_score is the report. Raises ReportNotReady until then."""
+    def get_report(self, job_id: int) -> int:
+        """The quality score of a finished job. Raises ReportNotReady until then."""
         job = self.get(job_id)
         if job.status != JobStatus.DONE or job.quality_score is None:
             raise ReportNotReady(job.status)
-        return job
+        return job.quality_score
 
     def run_next(self) -> bool:
         """The worker calls this. Returns False when there is nothing to do."""

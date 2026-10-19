@@ -15,6 +15,7 @@ from ..repositories.datasets import DatasetRepository
 from ..repositories.jobs import JobRepository
 from ..repositories.storage import Storage
 from ..services.datasets import DatasetService
+from ..services.jobs import JobService
 
 
 def get_session(request: Request) -> Iterator[Session]:
@@ -52,3 +53,10 @@ def get_dataset_service(repo: DatasetRepoDep, storage: StorageDep, settings: Set
 
 
 DatasetServiceDep = Annotated[DatasetService, Depends(get_dataset_service)]
+
+
+def get_job_service(jobs: JobRepoDep, datasets: DatasetRepoDep, storage: StorageDep) -> JobService:
+    return JobService(jobs, datasets, storage)
+
+
+JobServiceDep = Annotated[JobService, Depends(get_job_service)]

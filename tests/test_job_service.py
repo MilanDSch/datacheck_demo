@@ -60,7 +60,6 @@ def test_report_is_not_ready_when_done_without_a_score(service, jobs):
         service.get_report(1)
 
 
-def test_report_of_a_done_job_is_returned(service, jobs):
-    job = Job(id=1, status=JobStatus.DONE, quality_score=88)
-    jobs.get.return_value = job
-    assert service.get_report(1) is job
+def test_report_of_a_done_job_is_its_score(service, jobs):
+    jobs.get.return_value = Job(id=1, status=JobStatus.DONE, quality_score=88)
+    assert service.get_report(1) == 88
