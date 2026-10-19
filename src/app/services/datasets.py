@@ -1,10 +1,16 @@
 import csv
 import io
 import uuid
+from typing import TYPE_CHECKING
 
 from ..db.models import Dataset
 from ..repositories.datasets import DatasetRepository
 from ..repositories.storage import Storage
+from .access import owns_or_admin
+from .errors import DatasetNotFound, NotAllowed
+
+if TYPE_CHECKING:
+    from ..core.auth import User
 
 
 class InvalidUpload(Exception):
@@ -38,3 +44,11 @@ class DatasetService:
 
     def list_all(self) -> list[Dataset]:
         return self.repo.list_all()
+
+    def delete(self, dataset_id: int, user: "User") -> None:
+        dataset = self.repo.get(dataset_id)
+        if dataset is None:
+            raise DatasetNotFound
+        if not owns_or_admin(user, dataset.owner_oid):
+            raise NotAllowed
+        self.repo.delete(dataset)

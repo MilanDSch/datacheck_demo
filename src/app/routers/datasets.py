@@ -5,7 +5,8 @@ from ..core.flags import require_flag
 from ..core.settings import SettingsDep
 from ..schemas.datasets import DatasetOut
 from ..services.datasets import InvalidUpload, TooLarge
-from .deps import DatasetRepoDep, DatasetServiceDep
+from ..services.errors import DatasetNotFound, NotAllowed
+from .deps import DatasetServiceDep
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
@@ -48,12 +49,12 @@ def export_datasets(
 @router.delete("/{dataset_id}", status_code=204)
 def delete_dataset(
     dataset_id: int,
-    repo: DatasetRepoDep,
+    service: DatasetServiceDep,
     user: User = Depends(require_role("Researcher", "Admin")),
 ) -> None:
-    dataset = repo.get(dataset_id)
-    if dataset is None:
-        raise HTTPException(status_code=404, detail="dataset not found")
-    if "Admin" not in user.roles and dataset.owner_oid != user.oid:  # "own only"
-        raise HTTPException(status_code=403, detail="you may only delete your own datasets")
-    repo.delete(dataset)
+    try:
+        service.delete(dataset_id, user)
+    except DatasetNotFound:
+        raise HTTPException(status_code=404, detail="dataset not found") from None
+    except NotAllowed:
+        raise HTTPException(status_code=403, detail="you may only delete your own datasets") from None
