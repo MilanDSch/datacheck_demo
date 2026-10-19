@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from quality import check_quality
 
 from ..db.models import Job, JobStatus
@@ -6,6 +8,9 @@ from ..repositories.jobs import JobRepository
 from ..repositories.storage import Storage
 from .errors import DatasetNotFound, JobNotFound, ReportNotReady
 
+if TYPE_CHECKING:
+    from ..core.auth import User
+
 
 class JobService:
     def __init__(self, jobs: JobRepository, datasets: DatasetRepository, storage: Storage) -> None:
@@ -13,10 +18,10 @@ class JobService:
         self.datasets = datasets
         self.storage = storage
 
-    def start(self, dataset_id: int) -> Job:
+    def start(self, dataset_id: int, user: "User") -> Job:
         if self.datasets.get(dataset_id) is None:
             raise DatasetNotFound
-        return self.jobs.create(dataset_id)
+        return self.jobs.create(dataset_id, owner_oid=user.oid)
 
     def get(self, job_id: int) -> Job:
         job = self.jobs.get(job_id)

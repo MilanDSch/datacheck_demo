@@ -12,10 +12,10 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 def start_job(
     body: JobCreate,
     service: JobServiceDep,
-    _: User = Depends(require_role("Researcher", "Admin")),
+    user: User = Depends(require_role("Researcher", "Admin")),
 ) -> JobOut:
     try:
-        return JobOut.model_validate(service.start(body.dataset_id))
+        return JobOut.model_validate(service.start(body.dataset_id, user))
     except DatasetNotFound:
         raise HTTPException(status_code=404, detail="dataset not found") from None
 

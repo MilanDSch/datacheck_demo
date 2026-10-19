@@ -4,12 +4,15 @@ from unittest.mock import create_autospec
 
 import pytest
 
+from app.core.auth import User
 from app.db.models import Job, JobStatus
 from app.repositories.datasets import DatasetRepository
 from app.repositories.jobs import JobRepository
 from app.repositories.storage import FakeStorage
 from app.services.errors import DatasetNotFound, JobNotFound, ReportNotReady
 from app.services.jobs import JobService
+
+LOTTE = User(oid="oid-lotte", name="Lotte", roles=("Researcher",))
 
 
 @pytest.fixture
@@ -29,14 +32,14 @@ def service(jobs, datasets):
 
 def test_start_creates_a_job_for_an_existing_dataset(service, jobs, datasets):
     datasets.get.return_value = object()
-    service.start(7)
-    jobs.create.assert_called_once_with(7)
+    service.start(7, LOTTE)
+    jobs.create.assert_called_once_with(7, owner_oid=LOTTE.oid)
 
 
 def test_start_for_a_missing_dataset_raises_and_creates_nothing(service, jobs, datasets):
     datasets.get.return_value = None
     with pytest.raises(DatasetNotFound):
-        service.start(7)
+        service.start(7, LOTTE)
     jobs.create.assert_not_called()
 
 

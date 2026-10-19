@@ -37,6 +37,7 @@ class Job(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     dataset_id: Mapped[int] = mapped_column(ForeignKey("datasets.id"))
+    owner_oid: Mapped[str] = mapped_column(String(64))  # who started the job
     status: Mapped[str] = mapped_column(String(20), default=JobStatus.QUEUED.value)
     quality_score: Mapped[int | None] = mapped_column(default=None)
     error: Mapped[str | None] = mapped_column(String(500), default=None)

@@ -15,7 +15,13 @@ Base.metadata.create_all(engine)  # fine for a throwaway demo database, producti
 with Session(engine) as session:
     for n in range(3):
         dataset = Dataset(name=f"run-{n}.csv", owner_oid="lotte", file_key=f"key-{n}", rows=10)
-        session.add_all([dataset, Job(dataset=dataset, status="done"), Job(dataset=dataset, status="queued")])
+        session.add_all(
+            [
+                dataset,
+                Job(dataset=dataset, owner_oid="demo", status="done"),
+                Job(dataset=dataset, owner_oid="demo", status="queued"),
+            ]
+        )
     session.commit()
 
 queries: list[str] = []
