@@ -1,8 +1,10 @@
 from quality import check_quality
 
+from ..db.models import Job, JobStatus
 from ..repositories.datasets import DatasetRepository
 from ..repositories.jobs import JobRepository
 from ..repositories.storage import Storage
+from .errors import DatasetNotFound, JobNotFound, ReportNotReady
 
 
 class JobService:
@@ -10,6 +12,24 @@ class JobService:
         self.jobs = jobs
         self.datasets = datasets
         self.storage = storage
+
+    def start(self, dataset_id: int) -> Job:
+        if self.datasets.get(dataset_id) is None:
+            raise DatasetNotFound
+        return self.jobs.create(dataset_id)
+
+    def get(self, job_id: int) -> Job:
+        job = self.jobs.get(job_id)
+        if job is None:
+            raise JobNotFound
+        return job
+
+    def get_report(self, job_id: int) -> Job:
+        """The finished job, whose quality_score is the report. Raises ReportNotReady until then."""
+        job = self.get(job_id)
+        if job.status != JobStatus.DONE or job.quality_score is None:
+            raise ReportNotReady(job.status)
+        return job
 
     def run_next(self) -> bool:
         """The worker calls this. Returns False when there is nothing to do."""
