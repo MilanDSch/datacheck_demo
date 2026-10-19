@@ -21,10 +21,7 @@ class JobService:
             if dataset is None:
                 raise ValueError("dataset no longer exists")
             report = check_quality(self.storage.load(dataset.file_key).decode("utf-8"))
-            job.quality_score = report.quality_score
-            job.status = "done"
+            self.jobs.mark_done(job, report.quality_score)
         except Exception as exc:  # a failed job must never crash the worker
-            job.status = "failed"
-            job.error = str(exc)[:500]
-        self.jobs.session.commit()
+            self.jobs.mark_failed(job, str(exc))
         return True
