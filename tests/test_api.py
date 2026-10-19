@@ -176,3 +176,129 @@ def test_start_a_job_on_a_missing_dataset_is_404(client, lotte):
 
 def test_no_token_cannot_read_a_job_401(client):
     assert client.get("/api/v1/jobs/1").status_code == 401
+
+
+# ---- visibility: private and public ----
+def upload_public(client, headers, content=GOOD_CSV):
+    response = client.post(
+        "/api/v1/datasets",
+        headers=headers,
+        data={"visibility": "public"},
+        files={"file": ("run.csv", content, "text/csv")},
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def ids(response):
+    return [d["id"] for d in response.json()]
+
+
+def test_upload_is_private_by_default(client, lotte):
+    assert upload(client, lotte).json()["visibility"] == "private"
+
+
+def test_upload_can_be_public(client, lotte):
+    assert upload_public(client, lotte)["visibility"] == "public"
+
+
+def test_an_unknown_visibility_is_422(client, lotte):
+    response = client.post(
+        "/api/v1/datasets",
+        headers=lotte,
+        data={"visibility": "team"},
+        files={"file": ("run.csv", GOOD_CSV, "text/csv")},
+    )
+    assert response.status_code == 422
+
+
+def test_list_shows_own_and_public_datasets_and_hides_other_private_ones(client, private_key, lotte, pieter):
+    private_id = upload(client, lotte).json()["id"]
+    public_id = upload_public(client, lotte)["id"]
+    other = headers_for(private_key, "oid-other", ("Researcher",))
+    admin = headers_for(private_key, "oid-admin", ("Admin",))
+    assert ids(client.get("/api/v1/datasets", headers=lotte)) == [private_id, public_id]
+    assert ids(client.get("/api/v1/datasets", headers=other)) == [public_id]
+    assert ids(client.get("/api/v1/datasets", headers=pieter)) == [public_id]  # a Viewer reads public ones
+    assert ids(client.get("/api/v1/datasets", headers=admin)) == [private_id, public_id]
+
+
+def test_anyone_may_start_a_job_on_a_public_dataset_and_read_it(client, private_key, lotte):
+    dataset_id = upload_public(client, lotte)["id"]
+    other = headers_for(private_key, "oid-other", ("Researcher",))
+    job_id = start_job(client, other, dataset_id).json()["id"]
+    assert client.get(f"/api/v1/jobs/{job_id}", headers=other).status_code == 200
+    assert (
+        client.get(f"/api/v1/jobs/{job_id}", headers=lotte).status_code == 200
+    )  # public: the owner reads it too
+
+
+def test_starting_a_job_on_someone_elses_private_dataset_is_404(client, private_key, lotte):
+    dataset_id = upload(client, lotte).json()["id"]
+    other = headers_for(private_key, "oid-other", ("Researcher",))
+    assert start_job(client, other, dataset_id).status_code == 404
+
+
+def test_jobs_on_a_public_dataset_are_readable_by_others_until_it_goes_private(
+    client, private_key, lotte, pieter
+):
+    dataset_id = upload_public(client, lotte)["id"]
+    job_id = start_job(client, lotte, dataset_id).json()["id"]
+    assert client.get(f"/api/v1/jobs/{job_id}", headers=pieter).status_code == 200
+    client.patch(f"/api/v1/datasets/{dataset_id}", headers=lotte, json={"visibility": "private"})
+    assert client.get(f"/api/v1/jobs/{job_id}", headers=pieter).status_code == 404
+
+
+def test_owner_may_change_visibility(client, lotte):
+    dataset_id = upload(client, lotte).json()["id"]
+    response = client.patch(f"/api/v1/datasets/{dataset_id}", headers=lotte, json={"visibility": "public"})
+    assert response.status_code == 200
+    assert response.json()["visibility"] == "public"
+
+
+def test_admin_may_change_visibility_of_a_private_dataset(client, private_key, lotte):
+    dataset_id = upload(client, lotte).json()["id"]
+    admin = headers_for(private_key, "oid-admin", ("Admin",))
+    response = client.patch(f"/api/v1/datasets/{dataset_id}", headers=admin, json={"visibility": "public"})
+    assert response.status_code == 200
+
+
+def test_a_stranger_may_not_change_or_delete_a_public_dataset_403(client, private_key, lotte):
+    dataset_id = upload_public(client, lotte)["id"]
+    other = headers_for(private_key, "oid-other", ("Researcher",))
+    assert (
+        client.patch(
+            f"/api/v1/datasets/{dataset_id}", headers=other, json={"visibility": "private"}
+        ).status_code
+        == 403
+    )
+    assert client.delete(f"/api/v1/datasets/{dataset_id}", headers=other).status_code == 403
+    assert ids(client.get("/api/v1/datasets", headers=lotte)) == [dataset_id]  # still there
+
+
+def test_a_stranger_gets_404_for_a_private_dataset_on_patch_and_delete(client, private_key, lotte):
+    dataset_id = upload(client, lotte).json()["id"]
+    other = headers_for(private_key, "oid-other", ("Researcher",))
+    assert (
+        client.patch(
+            f"/api/v1/datasets/{dataset_id}", headers=other, json={"visibility": "public"}
+        ).status_code
+        == 404
+    )
+    assert client.delete(f"/api/v1/datasets/{dataset_id}", headers=other).status_code == 404
+
+
+def test_a_viewer_may_not_change_visibility_403(client, lotte, pieter):
+    dataset_id = upload_public(client, lotte)["id"]
+    assert (
+        client.patch(
+            f"/api/v1/datasets/{dataset_id}", headers=pieter, json={"visibility": "private"}
+        ).status_code
+        == 403
+    )
+
+
+def test_patching_a_missing_dataset_is_404(client, lotte):
+    assert (
+        client.patch("/api/v1/datasets/999", headers=lotte, json={"visibility": "public"}).status_code == 404
+    )
