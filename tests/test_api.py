@@ -118,3 +118,59 @@ def test_dataset_ids_are_not_filenames(client, lotte, storage):
     upload(client, lotte, name="../../etc/passwd")
     assert all(key.endswith(".csv") and "/" not in key for key in storage.files)
     assert Dataset  # imported so the model is registered
+
+
+# ---- ownership: who may touch what ----
+def headers_for(private_key, oid, roles):
+    return {"Authorization": f"Bearer {make_token(private_key, oid=oid, roles=roles)}"}
+
+
+def start_job(client, headers, dataset_id):
+    return client.post("/api/v1/jobs", headers=headers, json={"dataset_id": dataset_id})
+
+
+def test_delete_a_missing_dataset_is_404(client, lotte):
+    assert client.delete("/api/v1/datasets/999", headers=lotte).status_code == 404
+
+
+def test_viewer_may_not_delete_a_dataset_403(client, lotte, pieter):
+    dataset_id = upload(client, lotte).json()["id"]
+    assert client.delete(f"/api/v1/datasets/{dataset_id}", headers=pieter).status_code == 403
+
+
+def test_owner_may_delete_their_own_dataset(client, lotte):
+    dataset_id = upload(client, lotte).json()["id"]
+    assert client.delete(f"/api/v1/datasets/{dataset_id}", headers=lotte).status_code == 204
+
+
+def test_job_is_visible_to_its_owner_and_to_an_admin(client, private_key, lotte):
+    dataset_id = upload(client, lotte).json()["id"]
+    job_id = start_job(client, lotte, dataset_id).json()["id"]
+    admin = headers_for(private_key, "oid-admin", ("Admin",))
+    assert client.get(f"/api/v1/jobs/{job_id}", headers=lotte).status_code == 200
+    assert client.get(f"/api/v1/jobs/{job_id}", headers=admin).status_code == 200
+
+
+def test_someone_elses_job_and_report_are_404_like_a_missing_one(client, private_key, lotte, pieter):
+    dataset_id = upload(client, lotte).json()["id"]
+    job_id = start_job(client, lotte, dataset_id).json()["id"]
+    other_researcher = headers_for(private_key, "oid-other", ("Researcher",))
+    for headers in (pieter, other_researcher):
+        for suffix in ("", "/report"):
+            real = client.get(f"/api/v1/jobs/{job_id}{suffix}", headers=headers)
+            missing = client.get(f"/api/v1/jobs/9999{suffix}", headers=headers)
+            assert real.status_code == missing.status_code == 404
+            assert real.json() == missing.json()
+
+
+def test_viewer_may_not_start_a_job_403(client, lotte, pieter):
+    dataset_id = upload(client, lotte).json()["id"]
+    assert start_job(client, pieter, dataset_id).status_code == 403
+
+
+def test_start_a_job_on_a_missing_dataset_is_404(client, lotte):
+    assert start_job(client, lotte, 999).status_code == 404
+
+
+def test_no_token_cannot_read_a_job_401(client):
+    assert client.get("/api/v1/jobs/1").status_code == 401
