@@ -47,6 +47,23 @@ Try it with the files in `samples/`: `bench-run.csv` (clean), `bench-run-gaps.cs
 
 `DEMO.md` has the step-by-step runbook for the demos.
 
+## Layer rules
+
+A request goes router, service, repository. Each layer only talks to the one below it.
+
+- **Routers** translate HTTP: parse the request, call one service method, turn the result or the domain error
+  into a response. No business rules, no queries.
+- **Services** hold the rules (does the dataset exist, is the report ready). They raise domain errors from
+  `services/errors.py` (and `InvalidUpload` / `TooLarge` for uploads), never `HTTPException`, and they never
+  import FastAPI. The worker uses the same `JobService` as the API.
+- **Repositories** hold all queries and own the commit. Services never touch the session directly.
+- **Providers** in `routers/deps.py` are the only place that builds a service from its parts, so a test can
+  swap one provider (`dependency_overrides`) or test a service on its own with mocked repositories.
+- Job statuses are the `JobStatus` enum, never bare strings.
+
+To add an endpoint: add the rule to a service method, raise a domain error for each failure, map each error to
+a status code in the router, and test the rule in `tests/test_*_service.py` before the HTTP test.
+
 ## Settings
 
 Everything comes from environment variables or `.env` (see `.env.example`). A wrong value stops the app at
@@ -58,3 +75,21 @@ The feature flag `FEATURE_CSV_EXPORT` switches on `GET /api/v1/datasets/export.c
 - Files are stored on local disk behind a `Storage` interface. In Azure that becomes Blob Storage (one new class).
 - The worker polls the `jobs` table. That is enough here, a queue is a later step.
 - No CORS, no structured logging, no Key Vault.
+
+## Follow-ups before production
+
+Known gaps, in rough order of importance:
+
+- Ownership is only half done. Auth gives every request a `User`, and uploads record `owner_oid`, but jobs
+  have no owner at all and any signed-in user can read any job or report. The one ownership rule that exists
+  ("delete only your own dataset, unless Admin") lives in `routers/datasets.py` and calls the repository
+  directly. Move it into `DatasetService` (`delete(dataset_id, user)`), raise `DatasetNotFound` and a new
+  `NotAllowed`, and give `JobService` the same treatment (`start(dataset_id, owner)`, owner column on `Job`
+  with a migration).
+- `GET /datasets/export.csv` builds its CSV by hand in the router and does not quote names with commas.
+  Move it into the service and use the `csv` module.
+- Every repository method commits on its own, so a service call that writes twice is not atomic. Move the
+  commit to the service or to the request boundary when that matters.
+- `InvalidUpload` and `TooLarge` still live in `services/datasets.py`; move them to `services/errors.py`.
+- The upload size limit is checked in the router (how much to read) and again in `DatasetService`.
+- CORS, structured logging, secrets in Key Vault, and a queue instead of polling (see above).

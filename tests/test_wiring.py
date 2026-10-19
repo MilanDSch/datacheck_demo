@@ -37,3 +37,24 @@ def test_the_session_is_closed_after_the_request(tmp_path):
     with TestClient(app) as client:
         assert client.get("/api/v1/datasets").status_code == 200
     assert pool.checkedout() == 0  # nothing left open: the yield dependency cleaned up
+
+
+def test_job_routes_translate_service_errors_without_a_database():
+    from app.routers.deps import get_job_service
+    from app.services.errors import JobNotFound, ReportNotReady
+
+    class FakeJobService:
+        def get(self, job_id):
+            raise JobNotFound
+
+        def get_report(self, job_id):
+            raise ReportNotReady("running")
+
+    app = create_app(Settings(database_url="sqlite://"))
+    app.dependency_overrides[get_job_service] = FakeJobService
+    client = TestClient(app)
+
+    assert client.get("/api/v1/jobs/1").status_code == 404
+    response = client.get("/api/v1/jobs/1/report")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "report not ready, job is running"

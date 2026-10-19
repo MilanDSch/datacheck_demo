@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -6,6 +7,13 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     pass
+
+
+class JobStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
 
 
 def utcnow() -> datetime:
@@ -29,7 +37,7 @@ class Job(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     dataset_id: Mapped[int] = mapped_column(ForeignKey("datasets.id"))
-    status: Mapped[str] = mapped_column(String(20), default="queued")  # queued, running, done, failed
+    status: Mapped[str] = mapped_column(String(20), default=JobStatus.QUEUED.value)
     quality_score: Mapped[int | None] = mapped_column(default=None)
     error: Mapped[str | None] = mapped_column(String(500), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
