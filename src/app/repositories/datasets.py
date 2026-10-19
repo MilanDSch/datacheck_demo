@@ -1,15 +1,24 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..db.models import Dataset
+from ..db.models import Dataset, Visibility
 
 
 class DatasetRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def create(self, name: str, owner_oid: str, file_key: str, rows: int) -> Dataset:
-        dataset = Dataset(name=name, owner_oid=owner_oid, file_key=file_key, rows=rows)
+    def create(
+        self,
+        name: str,
+        owner_oid: str,
+        file_key: str,
+        rows: int,
+        visibility: Visibility = Visibility.PRIVATE,
+    ) -> Dataset:
+        dataset = Dataset(
+            name=name, owner_oid=owner_oid, file_key=file_key, rows=rows, visibility=visibility.value
+        )
         self.session.add(dataset)
         self.session.commit()
         return dataset

@@ -60,3 +60,21 @@ def test_existing_jobs_get_the_owner_of_their_dataset(tmp_path):
     migrate(url)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT owner_oid FROM jobs WHERE id = 1")).scalar_one() == "oid-lotte"
+
+
+def test_existing_datasets_become_private(tmp_path):
+    url = f"sqlite:///{tmp_path}/m.db"
+    migrate(url, "0002")
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO datasets (id, name, owner_oid, file_key, rows, created_at) "
+                "VALUES (1, 'a.csv', 'oid-lotte', 'k', 3, '2026-01-01')"
+            )
+        )
+    migrate(url)
+    with engine.connect() as connection:
+        assert (
+            connection.execute(text("SELECT visibility FROM datasets WHERE id = 1")).scalar_one() == "private"
+        )
