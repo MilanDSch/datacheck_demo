@@ -6,6 +6,7 @@ from ..db.models import Job, JobStatus
 from ..repositories.datasets import DatasetRepository
 from ..repositories.jobs import JobRepository
 from ..repositories.storage import Storage
+from .access import owns_or_admin
 from .errors import DatasetNotFound, JobNotFound, ReportNotReady
 
 if TYPE_CHECKING:
@@ -23,15 +24,16 @@ class JobService:
             raise DatasetNotFound
         return self.jobs.create(dataset_id, owner_oid=user.oid)
 
-    def get(self, job_id: int) -> Job:
+    def get(self, job_id: int, user: "User") -> Job:
+        """Owners and Admins only. Anyone else gets JobNotFound, so the API never says which ids exist."""
         job = self.jobs.get(job_id)
-        if job is None:
+        if job is None or not owns_or_admin(user, job.owner_oid):
             raise JobNotFound
         return job
 
-    def get_report(self, job_id: int) -> int:
+    def get_report(self, job_id: int, user: "User") -> int:
         """The quality score of a finished job. Raises ReportNotReady until then."""
-        job = self.get(job_id)
+        job = self.get(job_id, user)
         if job.status != JobStatus.DONE or job.quality_score is None:
             raise ReportNotReady(job.status)
         return job.quality_score

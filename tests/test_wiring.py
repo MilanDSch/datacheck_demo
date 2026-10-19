@@ -44,10 +44,10 @@ def test_job_routes_translate_service_errors_without_a_database():
     from app.services.errors import JobNotFound, ReportNotReady
 
     class FakeJobService:
-        def get(self, job_id):
+        def get(self, job_id, user):
             raise JobNotFound
 
-        def get_report(self, job_id):
+        def get_report(self, job_id, user):
             raise ReportNotReady("running")
 
     app = create_app(Settings(database_url="sqlite://"))
