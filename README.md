@@ -47,6 +47,23 @@ Try it with the files in `samples/`: `bench-run.csv` (clean), `bench-run-gaps.cs
 
 `DEMO.md` has the step-by-step runbook for the demos.
 
+## Layer rules
+
+A request goes router, service, repository. Each layer only talks to the one below it.
+
+- **Routers** translate HTTP: parse the request, call one service method, turn the result or the domain error
+  into a response. No business rules, no queries.
+- **Services** hold the rules (does the dataset exist, is the report ready). They raise domain errors from
+  `services/errors.py` (and `InvalidUpload` / `TooLarge` for uploads), never `HTTPException`, and they never
+  import FastAPI. The worker uses the same `JobService` as the API.
+- **Repositories** hold all queries and own the commit. Services never touch the session directly.
+- **Providers** in `routers/deps.py` are the only place that builds a service from its parts, so a test can
+  swap one provider (`dependency_overrides`) or test a service on its own with mocked repositories.
+- Job statuses are the `JobStatus` enum, never bare strings.
+
+To add an endpoint: add the rule to a service method, raise a domain error for each failure, map each error to
+a status code in the router, and test the rule in `tests/test_*_service.py` before the HTTP test.
+
 ## Settings
 
 Everything comes from environment variables or `.env` (see `.env.example`). A wrong value stops the app at
@@ -58,3 +75,18 @@ The feature flag `FEATURE_CSV_EXPORT` switches on `GET /api/v1/datasets/export.c
 - Files are stored on local disk behind a `Storage` interface. In Azure that becomes Blob Storage (one new class).
 - The worker polls the `jobs` table. That is enough here, a queue is a later step.
 - No CORS, no structured logging, no Key Vault.
+
+## Follow-ups before production
+
+Known gaps, in rough order of importance:
+
+- This README describes things that are not in the code yet: `AUTH_MODE` and Entra login (`core/` has no
+  auth), `FEATURE_CSV_EXPORT` and `GET /api/v1/datasets/export.csv`, `demo/` and `DEMO.md`. Build them or
+  remove the mentions.
+- No authentication. Uploads are stored with `owner_oid="local"`, and neither datasets nor jobs are checked
+  against an owner. Once auth exists, pass the caller into the service methods (`start(dataset_id, owner)`).
+- Every repository method commits on its own, so a service call that writes twice is not atomic. Move the
+  commit to the service or to the request boundary when that matters.
+- `InvalidUpload` and `TooLarge` still live in `services/datasets.py`; move them to `services/errors.py`.
+- The upload size limit is checked in the router (how much to read) and again in `DatasetService`.
+- CORS, structured logging, secrets in Key Vault, and a queue instead of polling (see above).
