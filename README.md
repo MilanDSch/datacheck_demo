@@ -53,13 +53,19 @@ A request goes router, service, repository. Each layer only talks to the one bel
 
 - **Routers** translate HTTP: parse the request, call one service method, turn the result or the domain error
   into a response. No business rules, no queries.
-- **Services** hold the rules (does the dataset exist, is the report ready). They raise domain errors from
+- **Services** hold the rules (does the dataset exist, is the report ready, may this user touch it). They raise domain errors from
   `services/errors.py` (and `InvalidUpload` / `TooLarge` for uploads), never `HTTPException`, and they never
   import FastAPI. The worker uses the same `JobService` as the API.
 - **Repositories** hold all queries and own the commit. Services never touch the session directly.
 - **Providers** in `routers/deps.py` are the only place that builds a service from its parts, so a test can
   swap one provider (`dependency_overrides`) or test a service on its own with mocked repositories.
 - Job statuses are the `JobStatus` enum, never bare strings.
+
+Ownership: a dataset or job belongs to the user who created it. Owners and Admins may touch it; the rule lives in
+`services/access.py`. Deleting someone else's dataset is a 403 (`NotAllowed`). Reading someone else's job or
+report is a 404 (`JobNotFound`), the same answer as a missing id, so the API does not leak which ids exist.
+The worker runs jobs without a user (`run_next` takes none). Jobs created before the `owner_oid` migration
+were given the owner of their dataset.
 
 To add an endpoint: add the rule to a service method, raise a domain error for each failure, map each error to
 a status code in the router, and test the rule in `tests/test_*_service.py` before the HTTP test.
@@ -80,12 +86,6 @@ The feature flag `FEATURE_CSV_EXPORT` switches on `GET /api/v1/datasets/export.c
 
 Known gaps, in rough order of importance:
 
-- Ownership is only half done. Auth gives every request a `User`, and uploads record `owner_oid`, but jobs
-  have no owner at all and any signed-in user can read any job or report. The one ownership rule that exists
-  ("delete only your own dataset, unless Admin") lives in `routers/datasets.py` and calls the repository
-  directly. Move it into `DatasetService` (`delete(dataset_id, user)`), raise `DatasetNotFound` and a new
-  `NotAllowed`, and give `JobService` the same treatment (`start(dataset_id, owner)`, owner column on `Job`
-  with a migration).
 - `GET /datasets/export.csv` builds its CSV by hand in the router and does not quote names with commas.
   Move it into the service and use the `csv` module.
 - Every repository method commits on its own, so a service call that writes twice is not atomic. Move the
