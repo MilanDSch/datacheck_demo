@@ -11,8 +11,8 @@ from app.routers.deps import get_dataset_repo
 
 
 class FakeRepo:
-    def list_all(self):
-        return [Dataset(id=1, name="bench-run", rows=10, created_at=datetime.now(UTC))]
+    def list_readable_by(self, owner_oid):
+        return [Dataset(id=1, name="bench-run", rows=10, visibility="private", created_at=datetime.now(UTC))]
 
 
 def test_list_datasets_with_a_fake_repository():
@@ -44,10 +44,10 @@ def test_job_routes_translate_service_errors_without_a_database():
     from app.services.errors import JobNotFound, ReportNotReady
 
     class FakeJobService:
-        def get(self, job_id):
+        def get(self, job_id, user):
             raise JobNotFound
 
-        def get_report(self, job_id):
+        def get_report(self, job_id, user):
             raise ReportNotReady("running")
 
     app = create_app(Settings(database_url="sqlite://"))

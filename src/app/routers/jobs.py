@@ -12,26 +12,26 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 def start_job(
     body: JobCreate,
     service: JobServiceDep,
-    _: User = Depends(require_role("Researcher", "Admin")),
+    user: User = Depends(require_role("Researcher", "Admin")),
 ) -> JobOut:
     try:
-        return JobOut.model_validate(service.start(body.dataset_id))
+        return JobOut.model_validate(service.start(body.dataset_id, user))
     except DatasetNotFound:
         raise HTTPException(status_code=404, detail="dataset not found") from None
 
 
 @router.get("/{job_id}", response_model=JobOut)
-def get_job(job_id: int, service: JobServiceDep, _: User = Depends(get_current_user)) -> JobOut:
+def get_job(job_id: int, service: JobServiceDep, user: User = Depends(get_current_user)) -> JobOut:
     try:
-        return JobOut.model_validate(service.get(job_id))
+        return JobOut.model_validate(service.get(job_id, user))
     except JobNotFound:
         raise HTTPException(status_code=404, detail="job not found") from None
 
 
 @router.get("/{job_id}/report", response_model=ReportOut)
-def get_report(job_id: int, service: JobServiceDep, _: User = Depends(get_current_user)) -> ReportOut:
+def get_report(job_id: int, service: JobServiceDep, user: User = Depends(get_current_user)) -> ReportOut:
     try:
-        score = service.get_report(job_id)
+        score = service.get_report(job_id, user)
     except JobNotFound:
         raise HTTPException(status_code=404, detail="job not found") from None
     except ReportNotReady as exc:

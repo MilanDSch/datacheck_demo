@@ -53,13 +53,31 @@ A request goes router, service, repository. Each layer only talks to the one bel
 
 - **Routers** translate HTTP: parse the request, call one service method, turn the result or the domain error
   into a response. No business rules, no queries.
-- **Services** hold the rules (does the dataset exist, is the report ready). They raise domain errors from
+- **Services** hold the rules (does the dataset exist, is the report ready, may this user touch it). They raise domain errors from
   `services/errors.py` (and `InvalidUpload` / `TooLarge` for uploads), never `HTTPException`, and they never
   import FastAPI. The worker uses the same `JobService` as the API.
 - **Repositories** hold all queries and own the commit. Services never touch the session directly.
 - **Providers** in `routers/deps.py` are the only place that builds a service from its parts, so a test can
   swap one provider (`dependency_overrides`) or test a service on its own with mocked repositories.
 - Job statuses are the `JobStatus` enum, never bare strings.
+
+Ownership and visibility: a dataset belongs to the user who uploaded it and is `private` (the default) or
+`public`. All the rules live in `services/access.py`:
+
+| | owner | Admin | any other signed-in user |
+|---|---|---|---|
+| read a private dataset | yes | yes | no, it looks like a missing id (404) |
+| read a public dataset, start a job on it | yes | yes | yes |
+| change visibility, delete | yes | yes | no: 403 on a public dataset, 404 on a private one |
+
+Reading is wider than changing: public never lets a stranger edit or delete. `GET /datasets` lists your own
+datasets plus the public ones (Admins see all). A job follows its dataset: it is readable by its owner, by
+Admins, and by everyone while its dataset is public, so making a dataset private hides its jobs again. Hidden
+things answer 404, the same as a missing id, so the API does not leak which ids exist. To add a third level
+such as `team`, add a value to `Visibility` and extend `can_read`; nothing else changes.
+
+The worker runs jobs without a user (`run_next` takes none). Datasets created before the `visibility`
+migration are private, and jobs created before the `owner_oid` migration belong to their dataset's owner.
 
 To add an endpoint: add the rule to a service method, raise a domain error for each failure, map each error to
 a status code in the router, and test the rule in `tests/test_*_service.py` before the HTTP test.
@@ -80,12 +98,6 @@ The feature flag `FEATURE_CSV_EXPORT` switches on `GET /api/v1/datasets/export.c
 
 Known gaps, in rough order of importance:
 
-- Ownership is only half done. Auth gives every request a `User`, and uploads record `owner_oid`, but jobs
-  have no owner at all and any signed-in user can read any job or report. The one ownership rule that exists
-  ("delete only your own dataset, unless Admin") lives in `routers/datasets.py` and calls the repository
-  directly. Move it into `DatasetService` (`delete(dataset_id, user)`), raise `DatasetNotFound` and a new
-  `NotAllowed`, and give `JobService` the same treatment (`start(dataset_id, owner)`, owner column on `Job`
-  with a migration).
 - `GET /datasets/export.csv` builds its CSV by hand in the router and does not quote names with commas.
   Move it into the service and use the `csv` module.
 - Every repository method commits on its own, so a service call that writes twice is not atomic. Move the

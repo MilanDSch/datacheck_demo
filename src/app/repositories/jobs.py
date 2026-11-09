@@ -8,8 +8,8 @@ class JobRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def create(self, dataset_id: int) -> Job:
-        job = Job(dataset_id=dataset_id)
+    def create(self, dataset_id: int, owner_oid: str) -> Job:
+        job = Job(dataset_id=dataset_id, owner_oid=owner_oid)
         self.session.add(job)
         self.session.commit()
         return job

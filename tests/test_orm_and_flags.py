@@ -16,7 +16,9 @@ def make_session() -> Session:
     session = Session(engine)
     a = Dataset(name="a.csv", owner_oid="x", file_key="k1", rows=3)
     b = Dataset(name="b.csv", owner_oid="y", file_key="k2", rows=5)
-    session.add_all([a, b, Job(dataset=a, status="done"), Job(dataset=a, status="failed")])
+    session.add_all(
+        [a, b, Job(dataset=a, owner_oid="o", status="done"), Job(dataset=a, owner_oid="o", status="failed")]
+    )
     session.commit()
     return session
 

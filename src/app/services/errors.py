@@ -5,6 +5,10 @@ class DatasetNotFound(Exception):
     """No dataset with that id."""
 
 
+class NotAllowed(Exception):
+    """The caller is known but may not do this to someone else's resource."""
+
+
 class JobNotFound(Exception):
     """No job with that id."""
 
